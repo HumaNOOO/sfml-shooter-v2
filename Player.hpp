@@ -1,9 +1,10 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
+#include <iostream>
 
 #include "Bullet.hpp"
 
-enum WeaponType
+enum class WeaponType
 {
 	RIFLE,
 	SNIPER,
@@ -13,7 +14,7 @@ enum WeaponType
 class Player
 {
 public:
-	Player(sf::Vector2f pos = { 666.f,398.f }, float radius = 20.f, sf::Color color = sf::Color(0, 255, 0)) : RADIUS{ radius }
+	Player(sf::Vector2f pos = { 666.f,398.f }, float radius = 20.f, sf::Color color = sf::Color(0, 0, 255)) : RADIUS{ radius }
 	{
 		player.setPosition(pos);
 		player.setFillColor(color);
@@ -24,7 +25,7 @@ public:
 		buffer.loadFromFile("gunshot.wav");
 		gun_sound.setBuffer(buffer);
 		gun_sound.setVolume(0.5);
-		player_weapon = RIFLE;
+		player_weapon = WeaponType::RIFLE;
 	}
 
 	inline sf::Vector2f getPosition()
@@ -61,15 +62,15 @@ public:
 		float angle_degrees = atan2f(mp.y - playerPos.y, mp.x - playerPos.x) / PI * 180.f;
 		pistol.setRotation(angle_degrees);
 		pistol.setPosition({ playerPos.x + cosf(angle_degrees * PI / 180.f) * RADIUS / 2.f, playerPos.y + sinf(angle_degrees * PI / 180.f) * RADIUS / 2.f });
-		if (player_weapon == SNIPER)
+		if (player_weapon == WeaponType::SNIPER)
 		{
 			str.append("\nweapon: SNIPER");
 		}
-		else if (player_weapon == RIFLE)
+		else if (player_weapon == WeaponType::RIFLE)
 		{
 			str.append("\nweapon: RIFLE");
 		}
-		else if (player_weapon == GRENADE_LAUNCHER)
+		else if (player_weapon == WeaponType::GRENADE_LAUNCHER)
 		{
 			str.append("\nweapon: GRENADE LAUNCHER");
 		}
@@ -92,20 +93,20 @@ public:
 
 	void shoot(std::vector<Bullet>& bullets)
 	{
-		if (player_weapon == RIFLE)
+		if (player_weapon == WeaponType::RIFLE)
 		{
 			shotCooldown = 0.04f;
 			bullets.push_back(Bullet(pistol.getPosition(), pistol.getRotation(), 1500.f, 5.f, 1));
 		}
-		else if (player_weapon == SNIPER)
+		else if (player_weapon == WeaponType::SNIPER)
 		{
 			shotCooldown = 1.f;
 			bullets.push_back(Bullet(pistol.getPosition(), pistol.getRotation(), 5000.f, 40.f, 100));
 		}
-		else if (player_weapon == GRENADE_LAUNCHER)
+		else if (player_weapon == WeaponType::GRENADE_LAUNCHER)
 		{
-			shotCooldown = 3.f;
-			bullets.push_back(Bullet(pistol.getPosition(), pistol.getRotation(), 1000.f, 5.f, 1, GRENADE_LAUNCHER));
+			shotCooldown = 0.5f;
+			bullets.push_back(Bullet(pistol.getPosition(), pistol.getRotation(), 1000.f, 5.f, 1, static_cast<int>(WeaponType::GRENADE_LAUNCHER)));
 		}
 		//gun_sound.play();
 	}

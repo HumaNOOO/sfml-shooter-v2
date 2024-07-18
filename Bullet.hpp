@@ -64,7 +64,7 @@ public:
 
 private:
 	int pierce_count;
-	float lifetime = 0.55f; //seconds
+	float lifetime = 5.55f; //seconds
 	sf::RectangleShape bullet;
 	sf::Vector2f move_vector;
 	int projectile_type;

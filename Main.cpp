@@ -1,5 +1,4 @@
-﻿#include <iostream>
-#include <string>
+﻿#include <string>
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <vector>
@@ -10,6 +9,7 @@
 #include <deque>
 #include <thread>
 #include <atomic>
+#include <iostream>
 
 #include "Player.hpp"
 #include "Enemy.hpp"
@@ -125,27 +125,34 @@ public:
 	explicit EnemyVertexArrayOptimized(float radius, int sides) : RADIUS{ radius }, SIDES{ sides }, ANGLE_INCREASE_RADIAN{ 360.f / sides * PI / 180.f }
 	{
 		vertices.setPrimitiveType(sf::Triangles);
-		for (size_t i = 0; i < SIDES+1; i++)
+		for (size_t i = 0; i < SIDES + 1; i++)
 		{
 			points.push_back({ cosf(ANGLE_INCREASE_RADIAN * i) * RADIUS, sinf(ANGLE_INCREASE_RADIAN * i) * RADIUS });
 		}
 	}
 
-	void update(const std::vector<Enemy>& enemies)
+	void update(const std::vector<Enemy>& enemies, const sf::Vector2f& screenCenter, int& enemiesDrawn)
 	{
 		vertices.clear();
 		for (const Enemy& enemy : enemies)
 		{
+			if (enemy.getPosition().x >= screenCenter.x + 700 ||
+				enemy.getPosition().x <= screenCenter.x - 700 ||
+				enemy.getPosition().y >= screenCenter.y + 400 ||
+				enemy.getPosition().y <= screenCenter.y - 400)
+				continue;
+
 			const sf::Vector2f enemyPos = enemy.getPosition();
 			for (int i = 0; i < SIDES; i++)
 			{
 				sf::Vertex v1(enemyPos, sf::Color::Green);
 				sf::Vertex v2(enemyPos + points[i], sf::Color::Green);
-				sf::Vertex v3(enemyPos + points[i+1], sf::Color::Green);
+				sf::Vertex v3(enemyPos + points[i + 1], sf::Color::Green);
 				vertices.append(v1);
 				vertices.append(v2);
 				vertices.append(v3);
 			}
+			++enemiesDrawn;
 		}
 	}
 private:
@@ -220,7 +227,7 @@ void updateEnemies(std::vector<Enemy>& enemies, std::string& text)
 	text.append("updateEnemies: " + std::to_string(duration) + " microseconds");
 }
 
-void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>& bullets, std::string& text)
+void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>& bullets, std::string& text, std::vector<sf::CircleShape>& explosionCircles)
 {
 	long long duration;
 	{
@@ -233,8 +240,16 @@ void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>&
 				if (distanceTwoPoints(bulletPos, enemy.getPosition()) < enemy.getRadius() + 1.f)
 				{
 					enemy.die();
-					if (bullet.getProjectileType() == GRENADE_LAUNCHER)
+					if (bullet.getProjectileType() == static_cast<int>(WeaponType::GRENADE_LAUNCHER))
 					{
+						sf::CircleShape cs;
+						std::cout << "spawning explosion\n";
+						cs.setPosition(bulletPos);
+						cs.setFillColor(sf::Color::Transparent);
+						cs.setOutlineColor(sf::Color::White);
+						cs.setOutlineThickness(4.f);
+						explosionCircles.push_back(cs);
+
 						for (Enemy& enemy1 : enemies)
 						{
 							if (distanceTwoPoints(bulletPos, enemy1.getPosition()) < 150.f)
@@ -273,10 +288,14 @@ int main()
 	int enemiesTotal = 0;
 	int enemiesDrawn = 0;
 
+	std::vector<sf::CircleShape> explosionCircles;
+	explosionCircles.reserve(10);
+
 	std::deque<sf::RectangleShape> frameTimes;
 	std::vector<Bullet> bullets;
+	bullets.reserve(2000);
 
-	std::thread collisionThread(threadWorker);
+	//std::thread collisionThread(threadWorker);
 
 	srand(time(0));
 
@@ -286,9 +305,10 @@ int main()
 	std::string textStr;
 
 	std::vector<Enemy> enemies;
-	for (int i = 0; i < 500; i++)
+	enemies.reserve(10000);
+	for (int i = 0; i < 9000; i++)
 	{
-		enemies.push_back(Enemy({ (float)(rand() % WINDOW_WIDTH), (float)(rand() % WINDOW_HEIGHT) }));
+		enemies.push_back(Enemy({ (float)(rand() % WINDOW_WIDTH * 5), (float)(rand() % WINDOW_HEIGHT * 5) }));
 	}
 
 	EnemyVertexArray enemyVertexArray{ enemies };
@@ -320,6 +340,7 @@ int main()
 	sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "Shooter", sf::Style::Default);
 	sf::Event e;
 	Player player;
+	player.move(WINDOW_WIDTH * 2.5f, WINDOW_HEIGHT * 2.5f);
 	sf::Clock clk;
 	sf::View view;
 
@@ -391,15 +412,15 @@ int main()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) player.move(0, 200.f * dt);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) player.move(-200.f * dt, 0.f);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) player.move(200.f * dt, 0.f);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num1)) player.setPlayerWeaponType(RIFLE);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num2)) player.setPlayerWeaponType(SNIPER);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num3)) player.setPlayerWeaponType(GRENADE_LAUNCHER);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num1)) player.setPlayerWeaponType(WeaponType::RIFLE);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num2)) player.setPlayerWeaponType(WeaponType::SNIPER);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num3)) player.setPlayerWeaponType(WeaponType::GRENADE_LAUNCHER);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::R))
 		{
 			enemies.clear();
-			for (int i = 0; i < 2000; i++)
+			for (int i = 0; i < 9000; i++)
 			{
-				enemies.push_back(Enemy({ (float)(rand() % WINDOW_WIDTH), (float)(rand() % WINDOW_HEIGHT) }));
+				enemies.push_back(Enemy({ (float)(rand() % WINDOW_WIDTH * 5), (float)(rand() % WINDOW_HEIGHT * 5) }));
 			}
 		}
 
@@ -408,40 +429,52 @@ int main()
 		window.setTitle("Shooter FPS: " + std::to_string(1 / dt));
 		const sf::Vector2f viewCenter = view.getCenter();
 
-		for (Enemy& enemy : enemies)
-		{
-			if (enemy.getPosition().x > viewCenter.x)
-			{
-				batches[0].addEnemy(&enemy);
-			}
-			else if (enemy.getPosition().x <= viewCenter.x)
-			{
-				batches[1].addEnemy(&enemy);
-			}
-		}
-		
-		for (Bullet& bullet : bullets)
-		{
-			if (bullet.getPosition().x > viewCenter.x)
-			{
-				batches[0].addBullet(&bullet);
-			}
-			else if (bullet.getPosition().x <= viewCenter.x)
-			{
-				batches[1].addBullet(&bullet);
-			}
-		}
+		//for (Enemy& enemy : enemies)
+		//{
+		//	if (enemy.getPosition().x > viewCenter.x)
+		//	{
+		//		batches[0].addEnemy(&enemy);
+		//	}
+		//	else if (enemy.getPosition().x <= viewCenter.x)
+		//	{
+		//		batches[1].addEnemy(&enemy);
+		//	}
+		//}
+		//
+		//for (Bullet& bullet : bullets)
+		//{
+		//	if (bullet.getPosition().x > viewCenter.x)
+		//	{
+		//		batches[0].addBullet(&bullet);
+		//	}
+		//	else if (bullet.getPosition().x <= viewCenter.x)
+		//	{
+		//		batches[1].addBullet(&bullet);
+		//	}
+		//}
 
 		updateEnemies(enemies, textStr);
 		update_collision = true;
 		//batches[0].updateCollision();
-		batches[1].updateCollision();
-		//updateCollision(dt, enemies, bullets, textStr);
+		//batches[1].updateCollision();
+		updateCollision(dt, enemies, bullets, textStr, explosionCircles);
 		updateBullets(dt, textStr, bullets);
-		evao.update(enemies);
-		while (update_collision) {};
-		batches[0].reset();
-		batches[1].reset();
+		evao.update(enemies, view.getCenter(), enemiesDrawn);
+		//while (update_collision) {};
+		//batches[0].reset();
+		//batches[1].reset();
+
+		for (sf::CircleShape& cs : explosionCircles)
+		{
+			float increase = cs.getRadius() + 1000.f * dt;
+
+			cs.move(-1000.f * dt, -1000.f * dt);
+
+			cs.setRadius(increase);
+		}
+
+		explosionCircles.erase(std::ranges::begin(std::ranges::remove_if(explosionCircles, [](const sf::CircleShape& cs) { return cs.getRadius() >= 150.f; })), explosionCircles.end());
+
 
 		if (drawLine)
 		{
@@ -542,19 +575,38 @@ int main()
 			window.draw(FOV);
 		}
 		window.draw(evao);
+
+		for (const sf::CircleShape cs : explosionCircles)
+		{
+			if (cs.getPosition().x >= view.getCenter().x + 850 ||
+				cs.getPosition().x <= view.getCenter().x - 850 ||
+				cs.getPosition().y >= view.getCenter().y + 550 ||
+				cs.getPosition().y <= view.getCenter().y - 550)
+				continue;
+
+			window.draw(cs);
+		}
+
 		window.setView(window.getDefaultView());
 
 		if (drawDebug)
 		{
+			sf::RectangleShape rs;
+			rs.setPosition(0, 0);
+			rs.setSize({ 500,200 });
+			rs.setFillColor(sf::Color(0, 0, 0, 190));
+
 			for (sf::RectangleShape& rect : frameTimes)
 			{
 				window.draw(rect);
 			}
+
+			window.draw(rs);
 			window.draw(text);
 		}
 
 		window.display();
 	}
-	exit_thread = true;
-	collisionThread.join();
+	//exit_thread = true;
+	//collisionThread.join();
 }
