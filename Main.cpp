@@ -1,4 +1,3 @@
-﻿#include <string>
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
 #include <vector>
@@ -10,9 +9,10 @@
 #include <thread>
 #include <atomic>
 #include <iostream>
+#include <string>
 
-#include "Player.hpp"
-#include "Enemy.hpp"
+#include "Player.h"
+#include "Enemy.h"
 
 std::atomic<bool> exit_thread = false;
 std::atomic<bool> update_collision = false;
@@ -31,7 +31,7 @@ public:
 			{
 				if (distanceTwoPoints(bulletPos, enemy->getPosition()) < enemy->getRadius() + 1.f)
 				{
-					bullet->modifyPierceCount(-1);
+					bullet->modifyPiercePower(-1);
 					enemy->die();
 				}
 			}
@@ -119,6 +119,24 @@ private:
 	sf::VertexArray vertices;
 };
 
+class Timer
+{
+public:
+	Timer(long long& dur) : duration_{ dur }
+	{
+		start_ = std::chrono::steady_clock::now();
+	}
+
+	~Timer()
+	{
+		duration_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start_).count();
+	}
+
+private:
+	std::chrono::time_point<std::chrono::steady_clock> start_;
+	long long& duration_;
+};
+
 class EnemyVertexArrayOptimized : public sf::Drawable, public sf::Transformable
 {
 public:
@@ -131,29 +149,34 @@ public:
 		}
 	}
 
-	void update(const std::vector<Enemy>& enemies, const sf::Vector2f& screenCenter, int& enemiesDrawn)
+	void update(const std::vector<Enemy>& enemies, const sf::Vector2f& screenCenter, int& enemiesDrawn, std::string& str)
 	{
-		vertices.clear();
-		for (const Enemy& enemy : enemies)
+		long long duration;
 		{
-			if (enemy.getPosition().x >= screenCenter.x + 700 ||
-				enemy.getPosition().x <= screenCenter.x - 700 ||
-				enemy.getPosition().y >= screenCenter.y + 400 ||
-				enemy.getPosition().y <= screenCenter.y - 400)
-				continue;
-
-			const sf::Vector2f enemyPos = enemy.getPosition();
-			for (int i = 0; i < SIDES; i++)
+			Timer t(duration);
+			vertices.clear();
+			for (const Enemy& enemy : enemies)
 			{
-				sf::Vertex v1(enemyPos, sf::Color::Green);
-				sf::Vertex v2(enemyPos + points[i], sf::Color::Green);
-				sf::Vertex v3(enemyPos + points[i + 1], sf::Color::Green);
-				vertices.append(v1);
-				vertices.append(v2);
-				vertices.append(v3);
+				if (enemy.getPosition().x >= screenCenter.x + 700 ||
+					enemy.getPosition().x <= screenCenter.x - 700 ||
+					enemy.getPosition().y >= screenCenter.y + 400 ||
+					enemy.getPosition().y <= screenCenter.y - 400)
+					continue;
+
+				const sf::Vector2f enemyPos = enemy.getPosition();
+				for (int i = 0; i < SIDES; i++)
+				{
+					sf::Vertex v1(enemyPos, sf::Color::Green);
+					sf::Vertex v2(enemyPos + points[i], sf::Color::Green);
+					sf::Vertex v3(enemyPos + points[i + 1], sf::Color::Green);
+					vertices.append(v1);
+					vertices.append(v2);
+					vertices.append(v3);
+				}
+				++enemiesDrawn;
 			}
-			++enemiesDrawn;
 		}
+		str.append("\nevaoUpdate: " + std::to_string(duration) + " us");
 	}
 private:
 	virtual void draw(sf::RenderTarget& rt, sf::RenderStates states) const
@@ -167,24 +190,6 @@ private:
 	const float RADIUS;
 	const int SIDES;
 	sf::VertexArray vertices;
-};
-
-class Timer
-{
-public:
-	Timer(long long* dur) : mDuration{ dur }
-	{
-		mStart = std::chrono::steady_clock::now();
-	}
-
-	~Timer()
-	{
-		*mDuration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - mStart).count();
-	}
-
-private:
-	std::chrono::time_point<std::chrono::steady_clock> mStart;
-	long long* mDuration;
 };
 
 inline float distanceTwoPoints(sf::Vector2f v1, sf::Vector2f v2)
@@ -205,8 +210,8 @@ void updateBullets(float dt, std::string& text, std::vector<Bullet>& bullets)
 {
 	long long duration;
 	{
-		Timer t(&duration);
-		bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [&](const Bullet& bullet) {return bullet.getLifetime() <= 0.f; }), bullets.end());
+		Timer t(duration);
+		bullets.erase(std::remove_if(bullets.begin(), bullets.end(), [&](const Bullet& bullet) { return bullet.getLifetime() <= 0.f; }), bullets.end());
 
 		for (Bullet& bullet : bullets)
 		{
@@ -214,24 +219,24 @@ void updateBullets(float dt, std::string& text, std::vector<Bullet>& bullets)
 			bullet.move(dt);
 		}
 	}
-	text.append("\nupdateBullets: " + std::to_string(duration) + " microseconds");
+	text.append("\nupdateBullets: " + std::to_string(duration) + " us");
 }
 
 void updateEnemies(std::vector<Enemy>& enemies, std::string& text)
 {
 	long long duration;
 	{
-		Timer t(&duration);
-		enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](Enemy& enemy) {return enemy.shouldDie(); }), enemies.end());
+		Timer t(duration);
+		enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](Enemy& enemy) { return enemy.shouldDie(); }), enemies.end());
 	}
-	text.append("updateEnemies: " + std::to_string(duration) + " microseconds");
+	text.append("updateEnemies: " + std::to_string(duration) + " us");
 }
 
 void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>& bullets, std::string& text, std::vector<sf::CircleShape>& explosionCircles)
 {
 	long long duration;
 	{
-		Timer t(&duration);
+		Timer t(duration);
 		for (Bullet& bullet : bullets)
 		{
 			const sf::Vector2f bulletPos = bullet.getPosition();
@@ -240,10 +245,9 @@ void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>&
 				if (distanceTwoPoints(bulletPos, enemy.getPosition()) < enemy.getRadius() + 1.f)
 				{
 					enemy.die();
-					if (bullet.getProjectileType() == static_cast<int>(WeaponType::GRENADE_LAUNCHER))
+					if (bullet.getProjectileType() == WeaponType::GrenadeLauncher)
 					{
 						sf::CircleShape cs;
-						std::cout << "spawning explosion\n";
 						cs.setPosition(bulletPos);
 						cs.setFillColor(sf::Color::Transparent);
 						cs.setOutlineColor(sf::Color::White);
@@ -258,12 +262,12 @@ void updateCollision(float dt, std::vector<Enemy>& enemies, std::vector<Bullet>&
 							}
 						}
 					}
-					bullet.modifyPierceCount(-1);
+					bullet.modifyPiercePower(-1);
 				}
 			}
 		}
 	}
-	text.append("\nupdateCollision: " + std::to_string(duration) + " microseconds");
+	text.append("\nupdateCollision: " + std::to_string(duration) + " us");
 }
 
 Batch batches[2];
@@ -412,9 +416,9 @@ int main()
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) player.move(0, 200.f * dt);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) player.move(-200.f * dt, 0.f);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) player.move(200.f * dt, 0.f);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num1)) player.setPlayerWeaponType(WeaponType::RIFLE);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num2)) player.setPlayerWeaponType(WeaponType::SNIPER);
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num3)) player.setPlayerWeaponType(WeaponType::GRENADE_LAUNCHER);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num1)) player.setWeaponType(WeaponType::Rifle);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num2)) player.setWeaponType(WeaponType::Sniper);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Num3)) player.setWeaponType(WeaponType::GrenadeLauncher);
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::R))
 		{
 			enemies.clear();
@@ -459,7 +463,7 @@ int main()
 		//batches[1].updateCollision();
 		updateCollision(dt, enemies, bullets, textStr, explosionCircles);
 		updateBullets(dt, textStr, bullets);
-		evao.update(enemies, view.getCenter(), enemiesDrawn);
+		evao.update(enemies, view.getCenter(), enemiesDrawn, textStr);
 		//while (update_collision) {};
 		//batches[0].reset();
 		//batches[1].reset();
@@ -478,13 +482,13 @@ int main()
 
 		if (drawLine)
 		{
-			line[0].position = player.getPistolPosition();
-			float pistolRotation = player.getPistiolRotationRadians();
+			line[0].position = player.getWeaponPosition();
+			float pistolRotation = player.getWeaponRotationRadians();
 			line[1].position = { line[0].position.x + cosf(pistolRotation) * 2000.f, line[0].position.y + sinf(pistolRotation) * 2000.f };
 		}
 		window.setView(view);
 		sf::Vector2f mp = window.mapPixelToCoords(sf::Mouse::getPosition(window));
-		player.update(window, dt, mp, textStr);
+		player.update(dt, mp, textStr);
 
 		if (player.getFollowDelay() <= 0.f)
 		{
@@ -510,7 +514,7 @@ int main()
 
 		if (timerClock <= 0.f)
 		{
-			sf::RectangleShape rect({ 2.f, (float)(-avgDt / framesSinceLastAverage * 10000) });
+			sf::RectangleShape rect({ 2.f, -avgDt / framesSinceLastAverage * 10000 });
 			rect.setPosition(202, WINDOW_HEIGHT);
 			rect.setFillColor(sf::Color::Red);
 			frameTimes.push_back(rect);
